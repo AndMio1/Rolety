@@ -11,3 +11,8 @@ Functions:
 - possible to debulg or see a log via RS or file (log is save to file if needed)
 - possible to enable webServer or MySensor device
   
+#Arduino Mega
+#Blind
+#cover
+#mySensor
+#Home automation
