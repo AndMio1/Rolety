@@ -1,23 +1,27 @@
+/* 
+*  Name:	  ArduinoMegaBlinds.ino
+*  Created:   09.01.2023
+*  Author:	  Andrzej Miozga
+*/
 #include <Arduino.h>
 #include "blindConst.h"
 #include "blind.h"
-
 #include <SD.h>
 
 ABlind::ABlind()
-{
-    
-    offset           = 0;
-    started          = 0;
+{    
+    offset = 0;
+    started = 0;
     state = BlindState::noInit;
 }
 
 void ABlind::BlindSetup(byte _ID, byte _pinPowerOn, byte _pinDirection, unsigned long _timeUp, unsigned long _timeDown, byte _position, const char* _group)
 {
     ABlindData localData;
-    offset      = 0;
-    started     = 0;
-    sendUpdate  = true;
+
+    offset                   = 0;
+    started                  = 0;
+    sendUpdate               = true;
     data.position            = _position;
     data.ID                  = _ID;
     data.parmPinPowerOn      = _pinPowerOn;
@@ -26,6 +30,7 @@ void ABlind::BlindSetup(byte _ID, byte _pinPowerOn, byte _pinDirection, unsigned
     data.parmTimeDown        = _timeDown;
     data.name = F("Roleta");
     data.name += String(data.ID);
+    
     if (strlen(_group) == 0)
     {
         data.group = GroupAll;
@@ -53,13 +58,13 @@ void ABlind::BlindSetup(byte _ID, byte _pinPowerOn, byte _pinDirection, unsigned
 
     if (data.parmPinPowerOn)
     {
-        digitalWrite(data.parmPinPowerOn, HIGH);   //wyłącz sterowanie / zasilanie, stan domyślny wyjść    
+        //digitalWrite(data.parmPinPowerOn, HIGH);   //wyłącz sterowanie / zasilanie, stan domyślny wyjść    
         pinMode(data.parmPinPowerOn, OUTPUT);
         digitalWrite(data.parmPinPowerOn, HIGH);   //wyłącz sterowanie / zasilanie, stan domyślny wyjść    
     }
     if (data.parmPinDirection)
     {
-        digitalWrite(data.parmPinDirection, HIGH);   //kierunek góra - stan domyślny wyjść    
+        //digitalWrite(data.parmPinDirection, HIGH);   //kierunek góra - stan domyślny wyjść    
         pinMode(data.parmPinDirection, OUTPUT);
         digitalWrite(data.parmPinDirection, HIGH);   //kierunek góra - stan domyślny wyjść    
     }
@@ -114,7 +119,7 @@ void ABlind::setStop(bool _powerOff) // _powerOff = true //natychmiastowe zatrzy
     if (_powerOff == true)
         SetPower(false);  //off
 
-    SerialPrintln(" Blind stop ID: %d, %d, %d", data.ID, data.position, state);     
+    //SerialPrintln(" Blind stop ID: %d, %d, %d", data.ID, data.position, state);     
 
     if (started > 0 && expectedTime > 0)
     {   
@@ -155,13 +160,13 @@ void ABlind::setStop(bool _powerOff) // _powerOff = true //natychmiastowe zatrzy
 
 void ABlind::setClose()    //procent 100, na ile ustawić a nie o ile przestawić
 {
-    SerialPrintln(">>> Blind close ID:%d (pos: %d)", data.ID, data.position);
+    //SerialPrintln(">>> Blind close ID:%d (pos: %d)", data.ID, data.position);
     setPosition(ABlindData::ClosedPos);
 }
 
 void ABlind::setOpen()     //procent 0, na ile ustawić a nie o ile przestawić
 {
-    SerialPrintln(">>> Blind open: ID:%d (pos: %d)", data.ID, data.position);
+    //SerialPrintln(">>> Blind open: ID:%d (pos: %d)", data.ID, data.position);
     setPosition(ABlindData::OpenedPos);
 }
 
@@ -186,7 +191,7 @@ void ABlind::setPosition(byte _percent) //procent 0-100, 100 to zamkniete
         expectedTime = (unsigned long)newPos * data.parmTimeDown / 100;
         SetDirection(true);//góra
 
-        SerialPrintln(">>> Blind mUP ID:%d, %d, %d", data.ID, data.position, _percent);
+        //SerialPrintln(">>> Blind mUP ID:%d, %d, %d", data.ID, data.position, _percent);
     }
     else
         if (data.position > newPos)
@@ -197,7 +202,7 @@ void ABlind::setPosition(byte _percent) //procent 0-100, 100 to zamkniete
             expectedTime = (unsigned long)newPos * data.parmTimeUp / 100;
             SetDirection(false);//dół
 
-            SerialPrintln(">>> Blind mDOWN ID: %d, %d, %d", data.ID, data.position, _percent);            
+            //SerialPrintln(">>> Blind mDOWN ID: %d, %d, %d", data.ID, data.position, _percent);            
         }
 
     if (state == BlindState::moveDown || state == BlindState::moveUp)
@@ -310,7 +315,8 @@ bool ABlind::isSelected()
 String  ABlindData::GetFileName(byte _id)
 {
     String  filename("R"); 
-    filename += String(_id); filename += F(".txt");
+    filename += String(_id); 
+    filename += F(".txt");
     return filename;
 }
 
@@ -440,17 +446,8 @@ bool ABlindData::readCfg()
 
     return false;
 }
-/*
-void ABlindData::Init(byte _ID, byte _pinPowerOn, byte _pinDirection, unsigned long _timeUp, unsigned long _timeDown)
-{
-    position            = 0;
-    ID                  = _ID;
-    parmPinPowerOn      = _pinPowerOn;
-    parmPinDirection    = _pinDirection;
-    parmTimeUp          = _timeUp; //milisekundy
-    parmTimeDown        = _timeDown;
-}
-*/
+
+
 void ABlindData::Init(ABlindData& _data)
 {
     ID                  = _data.ID;

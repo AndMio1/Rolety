@@ -1,12 +1,13 @@
-/* Name:	  ArduMegaBlinds.ino
-*  Created:  09.01.2021
+/* 
+*  Name:	  ArduinoMegaBlinds.ino
+*  Created:   09.01.2023
 *  Author:	  Andrzej Miozga
 */
-#define __SLOG__x      //remove off when you need want to see a log on console
-#define __LOGFILE__x
-#define __MySensor__   //you can use MySensor with SLOG, but MySensor & Debug are not working !!!
-#define __WWW__x       //Debug and WWW will not work !!!    
-#define __BDEBUG__d    //remove off when you need debug from SVcode
+#define __SLOG__off      //remove off when you need want to see a log on console
+#define __LOGFILE__      //log to file 
+#define __MySensor__     //you can use MySensor with SLOG, but MySensor & Debug are not working !!!
+#define __WWW__off       //enable www server; Debug and WWW will not work !!!    
+#define __BDEBUG__off    //remove off when you need debug from SVcode
 
 #include <Arduino.h>
 #include <SPI.h>
@@ -23,6 +24,7 @@
 #include <Ethernet_Generic.h>
 
 #if defined(__WWW__)
+    char txt[150]     = {0}; 
     #include <EthernetWebServer.h>
     #ifndef BOARD_NAME
 	    #define BOARD_NAME BOARD_TYPE
@@ -38,8 +40,10 @@ const char* BlindGroups[] = {"/KuchniaSalon", "/GabinetInne", NULL };
 //
 bool presentationDone = false; // any starting dumy value
 
-char txt[150]     = {0}; 
+
 int  refreshTime  = 5;
+unsigned long watchdogTime = 0;
+int PINtoRESET = 54; 
 
 uint8_t mac[] = {MY_MAC_ADDRESS};  // Enter a MAC address and IP address for your controller below.
 
@@ -55,8 +59,13 @@ void SerialPrintln(const char* input, ...)
     va_list args;
 
     va_start(args, input);
+    
+    #if defined(__SLOG__) || defined(__LOGFILE__)   
     vsprintf(txtLog, input, args);
+    #endif
+    
     va_end(args);
+
     #if defined(__SLOG__)
         Serial.println(txtLog);
     #endif
@@ -71,25 +80,12 @@ void SerialPrintln(const char* input, ...)
     #endif    
 }
 
-void Save2File(const String& _txt)
-{
-    String fname = String(millis());
-    fname += F("dbg.txt");
-    File outfile = SD.open(fname, O_WRITE | O_CREAT | O_APPEND);
-    if (outfile) 
-    {
-        outfile.print(_txt); 
-        outfile.close();   
-    }
-}
-
 void BlindSetup()
 {   
     static bool BlindSetupDone = false;
     if (BlindSetupDone == false)
     {
-        BlindSetupDone = true;
-        SerialPrintln(">>> BlindSetup %d", NUMBER_OF_BLINDS);
+        BlindSetupDone = true;    
 
         byte powerPin = PowerPinFirst;
         byte direcPin = DirecPinFirst;
@@ -114,7 +110,6 @@ void presentation()
     // Send the sketch version information to the gateway and Controller
     BlindSetup();
 
-    SerialPrintln(">>> MySensor presentation");
     sendSketchInfo("Rolety", "2024.1");
     
     for (int blind = 0; blind < NUMBER_OF_BLINDS; blind++)
@@ -125,13 +120,12 @@ void presentation()
         else
         {
             BlindArr[blind]->sendMessage();
-            delay(50);
         }
     }
     presentationDone = true;
     #endif
     
-    SerialPrintln(">>> {presentation} done");    
+    SerialPrintln(">>> {MySensor presentation} done");    
 }
 
 //MySensor message incomming
@@ -143,12 +137,11 @@ void receive(const MyMessage& message)
     uint8_t type   = message.getType();
     bool isAck     = message.isAck();
     bool isEcho    = message.isEcho();
-    //uint8_t sender = message.getSender();
     byte pct       = message.getByte();
+    mysensors_command_t cmd = message.getCommand();   
 
-    SerialPrintln(">>> {recieved}: id: %hd  type: %hd: Pos: %hd ack: %hd echo: %hd", msgCover, type, pct, isAck, isEcho);    
-   
-    if (isEcho == false && isAck == false && msgCover)
+    //SerialPrintln(">>> {recieved}: id: %hd  type: %hd: Pos: %hd ack: %hd echo: %hd cmd: %hd", msgCover, type, pct, isAck, isEcho, cmd);    
+    if (isEcho == false && isAck == false && cmd != C_INTERNAL && msgCover && msgCover < NUMBER_OF_BLINDS)
     {
         msgCover = msgCover-1;
         switch (type)
@@ -180,6 +173,8 @@ void receive(const MyMessage& message)
                 break;
         }
     }
+
+    watchdogTime = millis(); //it recives message.getCommand() != C_INTERNAL, what is information that it is alive
 }
 #endif
 
@@ -191,7 +186,7 @@ void handleRootPage()
 {
     String html;
     html = F("<!DOCTYPE HTML><head>"
-             "<meta http-equiv='refresh' content='1'>"
+             //"<meta http-equiv='refresh' content='1'>"
              "</head><html>"
              "<head>"
              "<meta name='viewport' content='width=device-width, initial-scale=2.0'>"      
@@ -218,6 +213,8 @@ void handleRootPage()
 
     html += txt;
     webServer.send(200, F("text/html"), html);
+
+    watchdogTime = millis();    
 }
 
 void handleRunPage()
@@ -229,7 +226,6 @@ void handleRunPage()
     String      rediretTo = "/";
     String      html;
 
-    //SerialPrintln(">>> {handleRunPage} START");        
     if(webServer.hasArg("URI"))
         rediretTo = webServer.arg("URI");
 
@@ -254,7 +250,7 @@ void handleRunPage()
         }
     }
     if (reqStatus != BlindState::noInit)
-        refreshTime = 1;
+        refreshTime = 2;
 
     for (int blind = 1; blind <= NUMBER_OF_BLINDS; blind++)
     {       
@@ -290,7 +286,8 @@ void handleRunPage()
     webServer.sendHeader(F("Cache-Control"), F("no-cache"), true);       
     webServer.sendHeader(F("Location"), rediretTo);    
     webServer.send(301, F("text/html"), html);
-    //SerialPrintln(">>> {handleRunPage} END");        
+
+    watchdogTime = millis();        
 }
 
 void handleMainPage()
@@ -302,8 +299,6 @@ void handleMainPage()
     boolean     selected;
     String      html; 
     String      grp = webServer.uri();
-
-    //SerialPrintln(">>> {handleMainPage} START");        
 
     html = F("<!DOCTYPE HTML><html><head>");
     //html += F("<meta charset='UTF-8'>");
@@ -386,7 +381,8 @@ void handleMainPage()
     {   //next refresh time
         refreshTime = 30;
     }
-    //SerialPrintln(">>> {handleMainPage} END");            
+
+    watchdogTime = millis();          
 }
 
 void handleNotFound()
@@ -417,6 +413,10 @@ void before()
     static bool beforeDone = false;
     if (!beforeDone)
     {
+        pinMode(PINtoRESET, INPUT);    // Just to be clear, as default is INPUT. Not really needed.
+        digitalWrite(PINtoRESET, LOW);
+    
+    
         beforeDone = true;            
         #if defined(__SLOG__)    
         Serial.begin(115200);
@@ -427,18 +427,18 @@ void before()
         //SerialPrintln(">>> Serial is on");            
         #endif
 
+        pinMode(SD_USE_THIS_PIN, OUTPUT);
+        digitalWrite(SD_USE_THIS_PIN, HIGH);
         if (!SD.begin(SD_USE_THIS_PIN)) 
         {
             SerialPrintln(">>> SD initialization failed");        
             //while (1);
             //If an SD card is inserted but not used, it is possible for the sketch to hang, because pin 4 is used as SS (active low) of the SD and when not used it is configured as INPUT by default. 
-            pinMode(SD_USE_THIS_PIN, OUTPUT);
-            digitalWrite(SD_USE_THIS_PIN, HIGH);
         } 
-        else 
-        {    
-            SerialPrintln(">>> SD Wiring is correct and a card is present.");
-        }
+        //else 
+        //{    
+        //    SerialPrintln(">>> SD Wiring is correct and a card is present.");
+        //}
     }
 }
 
@@ -471,8 +471,8 @@ void setup()
             delay(1000); // do nothing, no point running without Ethernet hardware
         }
     }
-    IPAddress ip = Ethernet.localIP();    
-    SerialPrintln("Ethernet IP: %hd.%hd.%hd.%hd", ip[0], ip[1], ip[2], ip[3]);    
+    //IPAddress ip = Ethernet.localIP();    
+    //SerialPrintln("Ethernet IP: %hd.%hd.%hd.%hd", ip[0], ip[1], ip[2], ip[3]);    
 
     #if defined(__BDEBUG__)
         debug_init();
@@ -523,8 +523,7 @@ bool blindInit()
         delay(500);
 
         // start the server
-        #if defined(__WWW__)          
-            SerialPrintln(">>> WebServer - starting");        
+        #if defined(__WWW__)                             
             webServer.on("/", handleRootPage);
             webServer.on("/run", handleRunPage);
             webServer.onNotFound(handleNotFound);
@@ -533,18 +532,41 @@ bool blindInit()
                 if (BlindGroups[i] != NULL)
                 {            
                     webServer.on(BlindGroups[i], handleMainPage);                    
-                    SerialPrintln(">>> WebServer - %s", BlindGroups[i]);
+                    //SerialPrintln(">>> WebServer - %s", BlindGroups[i]);
                 }
                 else
                     break;
             }
-            webServer.begin();
-            SerialPrintln(">>> WebServer - started");        
+            webServer.begin();                 
         #endif
 
     }
-
     return blindInitDone;
+}
+
+void Watchdog()
+{   //ethernet freezing overcome    
+    unsigned long now = millis();
+    if (now >= watchdogTime)
+        now = (now - watchdogTime) / 1000;
+    else
+        now = (now + (ULONG_MAX - watchdogTime))/1000;
+    
+    if (now / 60)
+    {
+        SerialPrintln(">>> {Watchdog} reset1 %ld", millis());
+        delay(LOOP_DELAY);
+        
+        Ethernet.hardreset();        
+    }
+    
+    if (now / 120)
+    {
+        SerialPrintln(">>> {Watchdog} reset2 %ld", millis());          
+        delay(LOOP_DELAY);
+
+        pinMode(PINtoRESET, OUTPUT);   // lights out. Assuming it is jumper-ed correctly.
+    }    
 }
 
 bool sendMyMessage(byte _id, byte _position, bool _stop)
@@ -555,27 +577,28 @@ bool sendMyMessage(byte _id, byte _position, bool _stop)
         {
             MyMessage coverMsg(_id, V_UP);
             send(coverMsg.set((boolean)(_position == ABlindData::OpenedPos)));
-            SerialPrintln(">>> Send message V_UP: %hd - pos: %hd", _id, _position);    
+            //SerialPrintln(">>> Send message V_UP: %hd - pos: %hd", _id, _position);    
             result = true;        
         }
         if (_stop)
         {
             MyMessage coverMsg(_id, V_DOWN);
             send(coverMsg.set((boolean)(_position == ABlindData::ClosedPos)));
-            SerialPrintln(">>> Send message V_DOWN: %hd - pos: %hd", _id, _position);   
+            //SerialPrintln(">>> Send message V_DOWN: %hd - pos: %hd", _id, _position);   
             result = true;             
         }
         if (1)
         {
             MyMessage coverMsg(_id, V_PERCENTAGE);
             send(coverMsg.set(_position));
-            SerialPrintln(">>> Send message V_PREC: %hd - pos: %hd", _id, _position);
+            //SerialPrintln(">>> Send message V_PREC: %hd - pos: %hd", _id, _position);
             result = true;
         }
         if(_stop)
         {
             MyMessage coverMsg(_id, V_STOP);
             send(coverMsg.set(_stop));
+            //SerialPrintln(">>> Send message V_STP: %hd - pos: %hd", _id, _position);
             result = true;
         }                
     #endif     
@@ -593,4 +616,5 @@ void loop()
 
         blindLoop();
     }
+    Watchdog();
 }
