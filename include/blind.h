@@ -1,10 +1,13 @@
+/* 
+*  Name:	  ArduinoMegaBlinds.ino
+*  Created:   09.01.2023
+*  Author:	  Andrzej Miozga
+*/
 #ifndef file_blind_h
 #define file_blind_h
 
 #include <limits.h>
-
-enum BlindState {noInit, moveUp, moveDown, stopedUp, stopedDown, Middle};
-//stan Unknown jest po włączeniu zasilania
+enum BlindState {noInit, moveUp, moveDown, stopedUp, stopedDown, Middle};//stan Unknown jest po włączeniu zasilania
 
 /*
 1. Przekażnik włącza się stanem LOW, konstruktow ustawia stany HIGH dla dwóch przekażników
@@ -32,7 +35,6 @@ private:
     String             GetFileName(byte _id);
 
 public:
-    //void Init(byte _ID, byte _pinPowerOn, byte _pinDirection, unsigned long _timeUp, unsigned long _timeDown);
     void Init(ABlindData& _data);
 
     void writeCfg();
@@ -40,7 +42,7 @@ public:
 };
 
 bool sendMyMessage(byte _id, byte _position, bool _stop);
-//void sendMyMessageInit(byte _id, byte _position);
+
 void SerialPrintln(const char* input, ...);
 
 class ABlind
